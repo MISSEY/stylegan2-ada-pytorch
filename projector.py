@@ -168,7 +168,7 @@ def run_projection(
 
     # Load target image.
     image_dir = glob.glob(os.path.join(target_dname, "*.png"), recursive=True)
-    os.makedirs(target_dname, exist_ok=True)
+    os.makedirs(outdir, exist_ok=True)
     for target_fname in image_dir:
 
 
@@ -196,8 +196,8 @@ def run_projection(
         synth_image = G.synthesis(projected_w.unsqueeze(0), noise_mode='const')
         synth_image = (synth_image + 1) * (255/2)
         synth_image = synth_image.permute(0, 2, 3, 1).clamp(0, 255).to(torch.uint8)[0].cpu().numpy()
-        PIL.Image.fromarray(synth_image, 'RGB').save(f'{target_dname}/{target_fname.split(".")[0].split("/")[-1]}projected.png')
-        np.savez(f'{target_dname}/{target_fname.split(".")[0].split("/")[-1]}.npz', w=projected_w.unsqueeze(0).cpu().numpy())
+        PIL.Image.fromarray(synth_image, 'RGB').save(f'{outdir}/{target_fname.split(".")[0].split("/")[-1]}projected.png')
+        np.savez(f'{outdir}/{target_fname.split(".")[0].split("/")[-1]}.npz', w=projected_w.unsqueeze(0).cpu().numpy())
 
 #----------------------------------------------------------------------------
 
