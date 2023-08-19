@@ -100,7 +100,8 @@ def generate_images(
         return
 
     if seeds is None:
-        ctx.fail('--seeds option is required when not using --projected-w')
+        seeds = np.random.randint(300, 3000, size=1000)
+        # ctx.fail('--seeds option is required when not using --projected-w')
 
     # Labels.
     label = torch.zeros([1, G.c_dim], device=device)
@@ -111,6 +112,7 @@ def generate_images(
     else:
         if class_idx is not None:
             print ('warn: --class=lbl ignored when running on an unconditional network')
+
 
     # Generate images.
     for seed_idx, seed in enumerate(seeds):
