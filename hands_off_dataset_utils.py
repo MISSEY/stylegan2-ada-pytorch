@@ -31,5 +31,5 @@ def save_weights(generator,path):
     }, path)
 
 if __name__ == '__main__':
-    G = load_style_gan("/mnt/d/projects/hands-off-dataset/pretrained_models/style_gan_models/network-snapshot-001000.pkl")
-    save_weights(G,"/mnt/d/projects/hands-off-dataset/pretrained_models/style_gan_models/network-snapshot-001000_official_generator.pt")
+    G = load_style_gan("/mnt/d/projects/hands-off-dataset/pretrained_models/style_gan_models/exp2/network-snapshot-015974.pkl")
+    save_weights(G,"/mnt/d/projects/hands-off-dataset/pretrained_models/style_gan_models/network-snapshot-015974.pt")

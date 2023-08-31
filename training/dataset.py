@@ -13,6 +13,7 @@ import PIL.Image
 import json
 import torch
 import dnnlib
+import pathlib
 
 try:
     import pyspng
@@ -25,6 +26,7 @@ class Dataset(torch.utils.data.Dataset):
     def __init__(self,
         name,                   # Name of the dataset.
         raw_shape,              # Shape of the raw image data (NCHW).
+        semantics,
         max_size    = None,     # Artificially limit the size of the dataset. None = no limit. Applied before xflip.
         use_labels  = False,    # Enable conditioning labels? False = label dimension is zero.
         xflip       = False,    # Artificially double the size of the dataset via x-flips. Applied after max_size.
@@ -35,6 +37,7 @@ class Dataset(torch.utils.data.Dataset):
         self._use_labels = use_labels
         self._raw_labels = None
         self._label_shape = None
+        self.semantics =semantics
 
         # Apply max_size.
         self._raw_idx = np.arange(self._raw_shape[0], dtype=np.int64)
@@ -67,6 +70,9 @@ class Dataset(torch.utils.data.Dataset):
     def _load_raw_image(self, raw_idx): # to be overridden by subclass
         raise NotImplementedError
 
+    def _load_raw_semantics(self,raw_idx):
+        raise NotImplementedError
+
     def _load_raw_labels(self): # to be overridden by subclass
         raise NotImplementedError
 
@@ -90,6 +96,7 @@ class Dataset(torch.utils.data.Dataset):
         if self._xflip[idx]:
             assert image.ndim == 3 # CHW
             image = image[:, :, ::-1]
+
         return image.copy(), self.get_label(idx)
 
     def get_label(self, idx):
@@ -117,6 +124,8 @@ class Dataset(torch.utils.data.Dataset):
 
     @property
     def num_channels(self):
+        if self.semantics:
+            return 4
         assert len(self.image_shape) == 3 # CHW
         return self.image_shape[0]
 
@@ -155,10 +164,12 @@ class ImageFolderDataset(Dataset):
     def __init__(self,
         path,                   # Path to directory or zip.
         resolution      = None, # Ensure specific resolution, None = highest available.
+        semantics = False,
         **super_kwargs,         # Additional arguments for the Dataset base class.
     ):
         self._path = path
         self._zipfile = None
+        self.semantics = semantics
 
         if os.path.isdir(self._path):
             self._type = 'dir'
@@ -176,9 +187,10 @@ class ImageFolderDataset(Dataset):
 
         name = os.path.splitext(os.path.basename(self._path))[0]
         raw_shape = [len(self._image_fnames)] + list(self._load_raw_image(0).shape)
+
         if resolution is not None and (raw_shape[2] != resolution or raw_shape[3] != resolution):
             raise IOError('Image files do not match the specified resolution')
-        super().__init__(name=name, raw_shape=raw_shape, **super_kwargs)
+        super().__init__(name=name, raw_shape=raw_shape, semantics = semantics, **super_kwargs)
 
     @staticmethod
     def _file_ext(fname):
@@ -217,6 +229,30 @@ class ImageFolderDataset(Dataset):
         if image.ndim == 2:
             image = image[:, :, np.newaxis] # HW => HWC
         image = image.transpose(2, 0, 1) # HWC => CHW
+        if self.semantics:
+            mask = np.expand_dims(self._load_raw_semantics(raw_idx), axis=0)
+            image = np.concatenate((image, mask))
+        return image
+
+    def _convert_partial_semantics(self,semantics):
+        semantics_converted = semantics.copy()
+
+        # convert partial crops to regular crops
+        mask_partial_crops = semantics == 3
+        semantics_converted[mask_partial_crops] = 1
+
+        # convert partial weeds to regular weeds
+        mask_partial_weeds = semantics == 4
+        semantics_converted[mask_partial_weeds] = 2
+
+        return semantics_converted
+
+    def _load_raw_semantics(self, raw_idx):
+        fname = self._image_fnames[raw_idx]
+        f = os.path.join(pathlib.Path(self._path).parent,'semantics',fname)
+        image = np.array(PIL.Image.open(f))
+        image = image.astype(np.uint8)
+        image = self._convert_partial_semantics(image)
         return image
 
     def _load_raw_labels(self):

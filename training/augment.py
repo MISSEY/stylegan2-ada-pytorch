@@ -65,6 +65,15 @@ def translate3d(tx, ty, tz, **kwargs):
         [0, 0, 0, 1],
         **kwargs)
 
+def translate4d(tw, tx, ty, tz, **kwargs):
+    return matrix(
+        [1, 0, 0, 0, tw],
+        [1, 1, 0, 0, tx],
+        [1, 0, 1, 0, ty],
+        [1, 0, 0, 1, tz],
+        [1, 0, 0, 0, 1],
+        **kwargs)
+
 def scale2d(sx, sy, **kwargs):
     return matrix(
         [sx, 0,  0],
@@ -78,6 +87,15 @@ def scale3d(sx, sy, sz, **kwargs):
         [0,  sy, 0,  0],
         [0,  0,  sz, 0],
         [0,  0,  0,  1],
+        **kwargs)
+
+def scale4d(sw,sx, sy, sz, **kwargs):
+    return matrix(
+        [sw, 0,  0,  0, 0],
+        [0,  sx, 0,  0, 0],
+        [0,  0,  sy, 0, 0],
+        [0,  0,  0, sz, 0],
+        [0,  0,  0,  0, 1],
         **kwargs)
 
 def rotate2d(theta, **kwargs):
@@ -96,6 +114,17 @@ def rotate3d(v, theta, **kwargs):
         [vz*vx*cc-vy*s, vz*vy*cc+vx*s, vz*vz*cc+c,    0],
         [0,             0,             0,             1],
         **kwargs)
+
+# def rotate4d(v, theta, **kwargs):
+#     vw = v[..., 0]; vx = v[..., 1]; vy = v[..., 2]; vz = v[..., 3];
+#     s = torch.sin(theta); c = torch.cos(theta); cc = 1 - c
+#     return matrix(
+#         [vw*vw*cc+c, vw*vx*cc-vz*s, vw*vy*cc+vy*s, vw*vz*cc-vx*s, 0]
+#         [vx*vx*cc+c,    vx*vy*cc-vz*s, vx*vz*cc+vy*s, 0],
+#         [vy*vx*cc+vz*s, vy*vy*cc+c,    vy*vz*cc-vx*s, 0],
+#         [vz*vx*cc-vy*s, vz*vy*cc+vx*s, vz*vz*cc+c,    0],
+#         [0,             0,             0,             1],
+#         **kwargs)
 
 def translate2d_inv(tx, ty, **kwargs):
     return translate2d(-tx, -ty, **kwargs)
@@ -304,8 +333,12 @@ class AugmentPipe(torch.nn.Module):
         # Select parameters for color transformations.
         # --------------------------------------------
 
+
         # Initialize homogeneous 3D transformation matrix: C @ color_in ==> color_out
-        I_4 = torch.eye(4, device=device)
+        if images.shape[1]>3:
+            I_4 = torch.eye(5, device=device)
+        else:
+            I_4 = torch.eye(4, device=device)
         C = I_4
 
         # Apply brightness with probability (brightness * strength).
@@ -314,7 +347,10 @@ class AugmentPipe(torch.nn.Module):
             b = torch.where(torch.rand([batch_size], device=device) < self.brightness * self.p, b, torch.zeros_like(b))
             if debug_percentile is not None:
                 b = torch.full_like(b, torch.erfinv(debug_percentile * 2 - 1) * self.brightness_std)
-            C = translate3d(b, b, b) @ C
+            if num_channels == 3:
+                C = translate3d(b, b, b) @ C
+            if num_channels ==4:
+                C = translate4d(b, b, b, b) @ C
 
         # Apply contrast with probability (contrast * strength).
         if self.contrast > 0:
@@ -322,10 +358,18 @@ class AugmentPipe(torch.nn.Module):
             c = torch.where(torch.rand([batch_size], device=device) < self.contrast * self.p, c, torch.ones_like(c))
             if debug_percentile is not None:
                 c = torch.full_like(c, torch.exp2(torch.erfinv(debug_percentile * 2 - 1) * self.contrast_std))
-            C = scale3d(c, c, c) @ C
+            if num_channels == 3:
+                C = scale3d(c, c, c) @ C
+            if num_channels == 4:
+                C = scale4d(c, c, c, c) @ C
+
 
         # Apply luma flip with probability (lumaflip * strength).
-        v = misc.constant(np.asarray([1, 1, 1, 0]) / np.sqrt(3), device=device) # Luma axis.
+        if num_channels == 3:
+            v = misc.constant(np.asarray([1, 1, 1, 0]) / np.sqrt(3), device=device)
+        if num_channels == 4:
+            v = misc.constant(np.asarray([1, 1, 1, 1, 0]) / np.sqrt(4), device=device)
+         # Luma axis.
         if self.lumaflip > 0:
             i = torch.floor(torch.rand([batch_size, 1, 1], device=device) * 2)
             i = torch.where(torch.rand([batch_size, 1, 1], device=device) < self.lumaflip * self.p, i, torch.zeros_like(i))
@@ -361,8 +405,10 @@ class AugmentPipe(torch.nn.Module):
             elif num_channels == 1:
                 C = C[:, :3, :].mean(dim=1, keepdims=True)
                 images = images * C[:, :, :3].sum(dim=2, keepdims=True) + C[:, :, 3:]
+            elif num_channels == 4:
+                images = C[:, :4, :4] @ images + C[:, :4, 4:]
             else:
-                raise ValueError('Image must be RGB (3 channels) or L (1 channel)')
+                raise ValueError('Image must be RGB (3 channels) or L (1 channel) or Semenatics (4 channels)')
             images = images.reshape([batch_size, num_channels, height, width])
 
         # ----------------------
