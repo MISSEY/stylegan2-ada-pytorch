@@ -85,7 +85,8 @@ def save_image_grid(img, fname, drange, grid_size):
         PIL.Image.fromarray(img, 'RGB').save(fname)
     if C == 4:
         PIL.Image.fromarray(img[:,:,0:3], 'RGB').save(fname)
-        f = os.path.join(pathlib.Path(fname).parent, 'reals_sem.png')
+        fn = fname.split('/')[-1]
+        f = os.path.join(pathlib.Path(fname).parent, 'Semantic_'+fn)
         PIL.Image.fromarray(img[:, :, -1], 'L').save(f)
 
 #----------------------------------------------------------------------------

@@ -1,2 +1,10 @@
 __pycache__/
 .cache/
+.idea/
+training-runs
+inception-2015-12-05
+.github/
+
+.github/ISSUE_TEMPLATE/bug_report.md
+.gitignore
+projected_image/05-15_00028_P0030852projected.png
